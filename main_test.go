@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"testing"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -16,18 +16,24 @@ import (
 // - テストコードが意図通りに終了するか
 func TestRun(t *testing.T) {
 	// キャンセル可能な「context.Context」のオブジェクトを作る。
+	// ポート番号を0に指定すると利用可能なポートを動的に選択してくれる。
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		t.Fatalf("failed to listen port %v", err)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	eg, ctx := errgroup.WithContext(ctx)
 	// 別ゴルーチンでテスト対象の「run」関数を実行してHTTPサーバー起動。
 	eg.Go(func() error {
-		return run(ctx)
+		return run(ctx, l)
 	})
 
-	// Small delay to ensure the HTTP server is up and running
-	time.Sleep(1 * time.Second)
-
 	in := "message"
-	rsp, err := http.Get("http://localhost:18080/" + in)
+	url := fmt.Sprintf("http://%s/%s", l.Addr().String(), in)
+	t.Logf("try request to %q", url)
+	rsp, err := http.Get(url)
+
 	if err != nil {
 		t.Fatalf("failed to get: %+v", err) // Use Fatalf to stop the test immediately
 	}
